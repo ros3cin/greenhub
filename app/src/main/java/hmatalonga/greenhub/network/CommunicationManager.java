@@ -19,14 +19,10 @@ package hmatalonga.greenhub.network;
 import android.content.Context;
 import android.util.Log;
 
-import com.android.volley.DefaultRetryPolicy;
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
+
 import com.google.gson.Gson;
+
+import org.greenrobot.eventbus.EventBus;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -36,10 +32,10 @@ import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
-import hmatalonga.greenhub.GreenHub;
-import hmatalonga.greenhub.fragments.HomeFragment;
+import hmatalonga.greenhub.events.StatusEvent;
 import hmatalonga.greenhub.managers.storage.GreenHubDb;
-import hmatalonga.greenhub.models.Sample;
+import hmatalonga.greenhub.models.data.Sample;
+import hmatalonga.greenhub.util.GreenHubHelper;
 import hmatalonga.greenhub.util.NetworkWatcher;
 
 /**
@@ -50,52 +46,52 @@ import hmatalonga.greenhub.util.NetworkWatcher;
 public class CommunicationManager {
     private static final String TAG = "CommunicationManager";
 
-    private static RequestQueue sQueue = Volley.newRequestQueue(GreenHub.getContext());
     private static Map<String, String> sParams = new HashMap<>();
 
-    private GreenHub mApp;
+    private GreenHubHelper mApp;
     private Gson mGson;
     private Context mContext;
     private SortedMap<Long, Sample> map;
-    private GreenHubDb db;
+    private GreenHubDb database;
     private ArrayList<Sample> samples;
     private int sTimeout = 5000; // 5s default for socket timeout
-    private int done, samplesCount;
+    private int done;
+    private long samplesCount;
 
-    public CommunicationManager(GreenHub app) {
+    public CommunicationManager(GreenHubHelper app) {
         this.mApp = app;
-        this.mContext = GreenHub.getContext();
+        this.mContext = null;
         this.mGson = new Gson();
-        db = GreenHubDb.getInstance(mContext);
+        database = new GreenHubDb();
     }
 
-    public CommunicationManager(GreenHub app, int timeout) {
+    public CommunicationManager(GreenHubHelper app, int timeout) {
         this.mApp = app;
-        this.mContext = GreenHub.getContext();
+        this.mContext = null;
         this.mGson = new Gson();
         this.sTimeout = timeout;
-        db = GreenHubDb.getInstance(mContext);
+        database = new GreenHubDb();
     }
 
     public void sendSamples() {
         boolean connected = NetworkWatcher.hasInternet(mContext);
 
         if (!connected) {
-            HomeFragment.setStatus("Not connected");
+            // HomeFragment.setStatus("Not connected");
             return;
         }
-        samplesCount = db.countSamples();
+        samplesCount = database.count(Sample.class);
         done = 0;
 
-        HomeFragment.setStatus("Samples sent " + done + "/" + samplesCount);
+        // HomeFragment.setStatus("Samples sent " + done + "/" + samplesCount);
 
-        map = db.queryOldestSamples(samplesCount); // Config.COMMS_MAX_UPLOAD_BATCH
+        // map = database.queryOldestSamples(samplesCount); // Config.COMMS_MAX_UPLOAD_BATCH
 
         if (map.size() > 0)
-            uploadSamples(map.values());
+            uploadSamples(null);
         else {
             Log.w(TAG, "No samples to send.");
-            HomeFragment.setStatus("No samples to send.");
+            EventBus.getDefault().post(new StatusEvent("No samples to send."));
         }
     }
 
@@ -117,35 +113,6 @@ public class CommunicationManager {
      * @return if uploaded successfully returns true, otherwise returns false
      */
     private void uploadSample(final Sample sample) {
-        String url = mApp.serverURL + "/samples";
-        sParams.clear();
-        sParams.put("data", mGson.toJson(sample));
-
-        // Request a string response from the provided URL.
-        StringRequest stringRequest = new StringRequest(Request.Method.POST, url,
-                new Response.Listener<String>() {
-                    @Override
-                    public void onResponse(String response) {
-                        Log.i(TAG, response);
-                        handleResponse(response);
-                    }
-                },
-                new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        error.printStackTrace();
-                    }
-                }){
-            @Override
-            protected Map<String, String> getParams() {
-                return sParams;
-            }
-        };
-        stringRequest.setRetryPolicy(new DefaultRetryPolicy(sTimeout,
-                DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT));
-
-        // Add the request to the RequestQueue.
-        sQueue.add(stringRequest);
     }
 
     private void handleResponse(String response) {
@@ -153,23 +120,23 @@ public class CommunicationManager {
             done++;
 
             // status
-            HomeFragment.setStatus("Samples sent " + done + "/" + samplesCount);
+            // HomeFragment.setStatus("Samples sent " + done + "/" + samplesCount);
 
             if (done == samplesCount) {
                 // status finished
-                SortedSet<Long> uploaded = new TreeSet<Long>();
+                SortedSet<Long> uploaded = new TreeSet<>();
                 int i = 0;
                 for (Long s : map.keySet()) {
                     if (i < done)
                         uploaded.add(s);
                     i += 1;
                 }
-                db.deleteSamples(uploaded);
+                // database.deleteSamples(uploaded);
             }
             else
                 uploadSample(samples.get(done));
         }
-        else
-            HomeFragment.setStatus("Error sending samples. Try again later");
+        else;
+             //HomeFragment.setStatus("Error sending samples. Try again later");
     }
 }

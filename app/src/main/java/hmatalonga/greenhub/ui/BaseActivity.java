@@ -24,6 +24,13 @@ import android.preference.PreferenceManager;
 import android.support.annotation.Nullable;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
+
+import hmatalonga.greenhub.GreenHubApp;
+import hmatalonga.greenhub.R;
+import hmatalonga.greenhub.util.SettingsUtils;
+
+import static hmatalonga.greenhub.util.LogUtils.makeLogTag;
 
 /**
  * A base activity that handles common functionality in the app.
@@ -31,9 +38,10 @@ import android.support.v7.app.AppCompatActivity;
 public abstract class BaseActivity extends AppCompatActivity implements
         SharedPreferences.OnSharedPreferenceChangeListener {
 
-    private static final String TAG = "BaseActivity";
+    private static final String TAG = makeLogTag(BaseActivity.class);
 
-    private Handler mHandler;
+    // Primary toolbar
+    private Toolbar mActionBarToolbar;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -44,9 +52,8 @@ public abstract class BaseActivity extends AppCompatActivity implements
             Intent intent = new Intent(this, WelcomeActivity.class);
             startActivity(intent);
             finish();
+            return;
         }
-
-        mHandler = new Handler();
 
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
         sp.registerOnSharedPreferenceChangeListener(this);
@@ -55,5 +62,34 @@ public abstract class BaseActivity extends AppCompatActivity implements
         if (ab != null) {
             ab.setDisplayHomeAsUpEnabled(true);
         }
+    }
+
+    @Override
+    public void setContentView(int layoutResID) {
+        super.setContentView(layoutResID);
+        getActionBarToolbar();
+    }
+
+    @Override
+    protected void onPostCreate(Bundle savedInstanceState) {
+        super.onPostCreate(savedInstanceState);
+    }
+
+    protected Toolbar getActionBarToolbar() {
+        if (mActionBarToolbar == null) {
+            mActionBarToolbar = (Toolbar) findViewById(R.id.toolbar_actionbar);
+            if (mActionBarToolbar != null) {
+                setSupportActionBar(mActionBarToolbar);
+            }
+        }
+        return mActionBarToolbar;
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
+        sp.unregisterOnSharedPreferenceChangeListener(this);
     }
 }

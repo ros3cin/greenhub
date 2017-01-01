@@ -18,23 +18,28 @@
 package hmatalonga.greenhub.fragments;
 
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import hmatalonga.greenhub.GreenHubApp;
 import hmatalonga.greenhub.R;
+import hmatalonga.greenhub.managers.sampling.DataEstimator;
 import hmatalonga.greenhub.ui.WelcomeActivity;
 import hmatalonga.greenhub.util.SettingsUtils;
 
 import static hmatalonga.greenhub.util.LogUtils.LOGD;
+import static hmatalonga.greenhub.util.LogUtils.makeLogTag;
 
 /**
  * The Terms of Service fragment in the welcome screen.
  */
 public class TosFragment extends WelcomeFragment implements WelcomeActivity.WelcomeActivityContent {
 
-    private static final String TAG = "TosFragment";
+    private static final String TAG = makeLogTag("TosFragment");
 
     @Override
     public boolean shouldDisplay(Context context) {

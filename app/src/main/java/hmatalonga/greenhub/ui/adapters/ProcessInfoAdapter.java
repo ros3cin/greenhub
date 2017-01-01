@@ -28,11 +28,12 @@ import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.Collections;
 
-import hmatalonga.greenhub.GreenHub;
+import hmatalonga.greenhub.util.GreenHubHelper;
 import hmatalonga.greenhub.R;
-import hmatalonga.greenhub.managers.sampling.Inspector;
-import hmatalonga.greenhub.models.ProcessInfo;
+import hmatalonga.greenhub.models.Package;
+import hmatalonga.greenhub.models.data.ProcessInfo;
 import hmatalonga.greenhub.util.AlphabeticalProcessInfoSort;
+import hmatalonga.greenhub.util.StringHelper;
 
 /**
  * Process List Adapter.
@@ -50,8 +51,8 @@ public class ProcessInfoAdapter extends BaseAdapter {
         mContext = context;
         sSearchArrayList = results;
         for (ProcessInfo item: sSearchArrayList)
-            if (!item.isSetApplicationLabel()) {
-                item.setApplicationLabel(GreenHub.labelForApp(context, item.getpName()));
+            if (item.applicationLabel != null) {
+                item.applicationLabel = GreenHubHelper.labelForApp(context, item.name);
             }
 
         Collections.sort(sSearchArrayList, new AlphabeticalProcessInfoSort(context));
@@ -97,8 +98,8 @@ public class ProcessInfoAdapter extends BaseAdapter {
 
         if (x == null) return convertView;
 
-        String p = x.getpName();
-        PackageInfo pak = Inspector.getPackageInfo(mContext, p);
+        String p = x.name;
+        PackageInfo pak = Package.getPackageInfo(mContext, p);
         String ver = "";
         if (pak != null) {
             ver = pak.versionName;
@@ -106,14 +107,16 @@ public class ProcessInfoAdapter extends BaseAdapter {
                 ver = pak.versionCode+"";
         }
 
-        holder.appIcon.setImageDrawable(GreenHub.iconForApp(mContext, p));
+        holder.appIcon.setImageDrawable(GreenHubHelper.iconForApp(mContext, p));
         holder.pkgName.setText(truncate(p));
-        if (x.isSetApplicationLabel()) {
-            holder.txtName.setText(truncate(x.getApplicationLabel() + " " + ver));
+        if (x.applicationLabel != null) {
+            holder.txtName.setText(truncate(x.applicationLabel + " " + ver));
         } else {
-            holder.txtName.setText(truncate(GreenHub.labelForApp(mContext, p) + " " + ver));
+            holder.txtName.setText(truncate(GreenHubHelper.labelForApp(mContext, p) + " " + ver));
         }
-        holder.txtBenefit.setText(truncate(GreenHub.translatedPriority(x.getImportance())));
+        holder.txtBenefit.setText(
+                truncate(StringHelper.translatedPriority(mContext, x.importance))
+        );
 
         return convertView;
     }

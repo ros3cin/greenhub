@@ -18,78 +18,75 @@ package hmatalonga.greenhub.ui;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Typeface;
 import android.os.Bundle;
+import android.support.design.widget.FloatingActionButton;
+import android.support.design.widget.Snackbar;
 import android.support.design.widget.TabLayout;
 import android.support.v4.view.ViewPager;
-import android.support.v7.app.ActionBar;
-import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 
-import hmatalonga.greenhub.GreenHub;
+import hmatalonga.greenhub.GreenHubApp;
 import hmatalonga.greenhub.R;
-import hmatalonga.greenhub.fragments.HomeFragment;
-import hmatalonga.greenhub.managers.sampling.Inspector;
-import hmatalonga.greenhub.tasks.RegisterDeviceTask;
-import hmatalonga.greenhub.ui.adapters.PagerAdapter;
-import hmatalonga.greenhub.util.FontManager;
+import hmatalonga.greenhub.managers.sampling.DataEstimator;
+import hmatalonga.greenhub.managers.storage.GreenHubDb;
+import hmatalonga.greenhub.ui.adapters.TabAdapter;
+import hmatalonga.greenhub.ui.layouts.MainTabLayout;
 
-public class MainActivity extends BaseActivity {
-    private static GreenHub sApp = null;
+import static hmatalonga.greenhub.util.LogUtils.LOGI;
+import static hmatalonga.greenhub.util.LogUtils.makeLogTag;
+
+public class MainActivity extends BaseActivity implements Toolbar.OnMenuItemClickListener {
+
+    private static final String TAG = makeLogTag(MainActivity.class);
+
+    private GreenHubApp mApp;
+
     private ViewPager mViewPager;
-    private ActionBar mActionBar;
 
-    private int mCurrentToolbarTitle = R.string.app_name;
+    public GreenHubDb database;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Set the Main Activity instance on the App class
-        GreenHub.setMain(this);
 
-        // Configure View and Layout
         setContentView(R.layout.activity_main);
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        mActionBar = getSupportActionBar();
-        assert mActionBar != null;
-        mActionBar.setTitle(mCurrentToolbarTitle);
 
-        // Initialize Application instance
-//        sApp = new GreenHub(getApplicationContext());
-//        sApp.initModules();
+        LOGI(TAG, "onCreate() called");
 
-        // TODO: Create default xml preferences file
-        // TODO: Create a chart menu with temp, voltage and battery level
-        // PreferenceManager.setDefaultValues();
+        loadComponents();
+    }
 
-        // Initialize fragments content
-//        HomeFragment.setApp(sApp);
+    @Override
+    protected void onStart() {
+        super.onStart();
+        database.getDefaultInstance();
+    }
 
-        // Run tasks --
-        HomeFragment.setStatus("Stopped");
-        // Register device on the web server
-//        new RegisterDeviceTask().execute(sApp);
-
-//        setupTabs();
+    @Override
+    protected void onStop() {
+        super.onStop();
+        database.close();
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
+        super.onCreateOptionsMenu(menu);
+
+        // Add the search button to the toolbar.
+        Toolbar toolbar = getActionBarToolbar();
+        toolbar.inflateMenu(R.menu.menu_main);
+        toolbar.setOnMenuItemClickListener(this);
         return true;
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
+    public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {}
 
+    @Override
+    public boolean onMenuItemClick(MenuItem item) {
         switch (item.getItemId()) {
             case R.id.action_settings:
                 startActivity(new Intent(this, SettingsActivity.class));
@@ -99,85 +96,69 @@ public class MainActivity extends BaseActivity {
                 return true;
         }
 
-        return super.onOptionsItemSelected(item);
+        return false;
     }
 
-    @Override
-    protected void onResume() {
-        //sApp.startReceivers();
-        // update status
-        // refresh UI
-        // Toast.makeText(getApplicationContext(), "App resumed", Toast.LENGTH_LONG).show();
-        super.onResume();
+    private void loadComponents() {
+        database = new GreenHubDb();
+
+        mApp = (GreenHubApp) getApplication();
+
+        loadViews();
+
+        // Run tasks --
+        // Register device on the web server
+        // new RegisterDeviceTask().execute(sApp);
     }
 
-    @Override
-    protected void onPause() {
-        //sApp.stopReceivers();
-        Inspector.resetRunningProcessInfo();
-        // Toast.makeText(getApplicationContext(), "App paused", Toast.LENGTH_LONG).show();
-        super.onPause();
-    }
+    private void loadViews() {
+        mViewPager = (ViewPager) findViewById(R.id.viewpager);
+        mViewPager.setOffscreenPageLimit(TabAdapter.NUM_TABS - 1);
 
-    private void setupTabs() {
-        TabLayout tabLayout = (TabLayout) findViewById(R.id.tab_layout);
-        assert tabLayout != null;
+        final TabAdapter mTabAdapter = new TabAdapter(getFragmentManager());
+        mViewPager.setAdapter(mTabAdapter);
 
-        tabLayout.addTab(tabLayout.newTab().setIcon(R.drawable.ic_home_white_24dp));
-        tabLayout.addTab(tabLayout.newTab().setIcon(R.drawable.ic_account_white_24dp));
-        tabLayout.addTab(tabLayout.newTab().setIcon(R.drawable.ic_information_white_24dp));
-        tabLayout.setTabGravity(TabLayout.GRAVITY_FILL);
+        MainTabLayout mTabLayout = (MainTabLayout) findViewById(R.id.tab_layout);
+        mTabLayout.createTabs();
 
-        final PagerAdapter adapter = new PagerAdapter(getSupportFragmentManager(),
-                tabLayout.getTabCount());
+        final FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fabSendSample);
+        if (fab == null) return;
 
-        mViewPager = (ViewPager) findViewById(R.id.pager);
-        assert mViewPager != null;
+        fab.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                int count = database.allUsages().size();
+                Snackbar.make(view, "Based on " + count + " usages.", Snackbar.LENGTH_SHORT).show();
+            }
+        });
 
-        try {
-            mViewPager.setAdapter(adapter);
-            mViewPager.addOnPageChangeListener(new TabLayout.TabLayoutOnPageChangeListener(tabLayout));
-            tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
-                @Override
-                public void onTabSelected(TabLayout.Tab tab) {
-                    switch (tab.getPosition()) {
-                        case 0:
-                            mCurrentToolbarTitle = R.string.title_fragment_home;
-                            break;
-                        case 1:
-                            mCurrentToolbarTitle = R.string.title_fragment_device;
-                            break;
-                        case 2:
-                            mCurrentToolbarTitle = R.string.title_fragment_about;
-                            break;
-                        default:
-                            mCurrentToolbarTitle = R.string.app_name;
-                    }
-                    mViewPager.setCurrentItem(tab.getPosition());
-                    mActionBar.setTitle(mCurrentToolbarTitle);
+        mTabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                mViewPager.setCurrentItem(tab.getPosition());
+                getActionBarToolbar().setTitle(tab.getContentDescription());
+                if (tab.getPosition() == 0) {
+                    fab.show();
+                } else {
+                    fab.hide();
                 }
+            }
 
-                @Override
-                public void onTabUnselected(TabLayout.Tab tab) {
-                }
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+                //  nop
+            }
 
-                @Override
-                public void onTabReselected(TabLayout.Tab tab) {
-                }
-            });
-        }
-        catch (NullPointerException e) {
-            e.printStackTrace();
-        }
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+                //scroll the active fragment's contents to the top when user taps the current tab
+            }
+        });
+
+        mViewPager.addOnPageChangeListener(new TabLayout.TabLayoutOnPageChangeListener(mTabLayout));
     }
 
-    private void setupFont(View view) {
-        Typeface iconFont = FontManager.getTypeface(getApplicationContext(), FontManager.FONTAWESOME);
-        FontManager.markAsIconContainer(view, iconFont);
-    }
-
-    @Override
-    public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
-
+    public DataEstimator getEstimator() {
+        return mApp.estimator;
     }
 }

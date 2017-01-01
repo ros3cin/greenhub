@@ -34,6 +34,14 @@ public class SettingsUtils {
      * Boolean indicating whether ToS has been accepted.
      */
     public static final String PREF_TOS_ACCEPTED = "pref_tos_accepted";
+    /**
+     * Boolean indicating whether ToS has been accepted.
+     */
+    public static final String PREF_DEVICE_REGISTERED = "pref_device_registered";
+    /**
+     * Boolean indicating whether to send installed packages with the samples.
+     */
+    public static final String PREF_SEND_INSTALLED_PACKAGES = "pref_send_installed";
 
     /**
      * Return true if user has accepted the
@@ -45,7 +53,6 @@ public class SettingsUtils {
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
         return sp.getBoolean(PREF_TOS_ACCEPTED, false);
     }
-
     /**
      * Mark {@code newValue whether} the user has accepted the TOS so the app doesn't ask again.
      *
@@ -55,5 +62,65 @@ public class SettingsUtils {
     public static void markTosAccepted(final Context context, boolean newValue) {
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
         sp.edit().putBoolean(PREF_TOS_ACCEPTED, newValue).apply();
+    }
+
+    /**
+     * Mark {@code newValue whether} the device has registered in the web server
+     * so the app doesn't register again.
+     *
+     * @param context Context to be used to edit the {@link android.content.SharedPreferences}.
+     * @param newValue New value that will be set.
+     */
+    public static void markDeviceAccepted(final Context context, boolean newValue) {
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+        sp.edit().putBoolean(PREF_DEVICE_REGISTERED, newValue).apply();
+    }
+
+    /**
+     * Return true if device has been registered in the web server,
+     * false if they haven't (yet).
+     *
+     * @param context Context to be used to lookup the {@link android.content.SharedPreferences}.
+     */
+    public static boolean isDeviceRegistered(final Context context) {
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+        return sp.getBoolean(PREF_DEVICE_REGISTERED, false);
+    }
+
+    public static void markInstalledPackagesIncluded(final Context context, boolean newValue) {
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+        sp.edit().putBoolean(PREF_SEND_INSTALLED_PACKAGES, newValue).apply();
+    }
+
+    public static boolean isInstalledPackagesIncluded(final Context context) {
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+        return sp.getBoolean(PREF_SEND_INSTALLED_PACKAGES, false);
+    }
+
+    /**
+     * Helper method to register a settings_prefs listener. This method does not automatically handle
+     * {@code unregisterOnSharedPreferenceChangeListener() un-registering} the listener at the end
+     * of the {@code context} lifecycle.
+     *
+     * @param context  Context to be used to lookup the {@link android.content.SharedPreferences}.
+     * @param listener Listener to register.
+     */
+    public static void registerOnSharedPreferenceChangeListener(final Context context,
+                                                                SharedPreferences.OnSharedPreferenceChangeListener listener) {
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+        sp.registerOnSharedPreferenceChangeListener(listener);
+    }
+
+    /**
+     * Helper method to un-register a settings_prefs listener typically registered with
+     * {@code registerOnSharedPreferenceChangeListener()}
+     *
+     * @param context  Context to be used to lookup the {@link android.content.SharedPreferences}.
+     * @param listener Listener to un-register.
+     */
+    public static void unregisterOnSharedPreferenceChangeListener(final Context context,
+                                                                  SharedPreferences.OnSharedPreferenceChangeListener listener) {
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+        sp.unregisterOnSharedPreferenceChangeListener(listener);
     }
 }

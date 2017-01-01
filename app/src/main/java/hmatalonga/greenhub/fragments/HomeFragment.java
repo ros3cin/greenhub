@@ -16,177 +16,303 @@
 
 package hmatalonga.greenhub.fragments;
 
+import android.app.Fragment;
 import android.content.Context;
+import android.graphics.Color;
+import android.os.BatteryManager;
 import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.v4.app.Fragment;
-import android.support.v7.widget.GridLayoutManager;
+import android.os.Handler;
+import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
+
 import java.util.ArrayList;
 
-import hmatalonga.greenhub.GreenHub;
+import hmatalonga.greenhub.Config;
 import hmatalonga.greenhub.R;
-import hmatalonga.greenhub.managers.sampling.BatteryEstimator;
-import hmatalonga.greenhub.models.DeviceResourceCard;
-import hmatalonga.greenhub.ui.adapters.RVAdapter;
+import hmatalonga.greenhub.events.BatteryLevelEvent;
+import hmatalonga.greenhub.events.PowerSourceEvent;
+import hmatalonga.greenhub.events.StatusEvent;
+import hmatalonga.greenhub.managers.sampling.DataEstimator;
+import hmatalonga.greenhub.models.Battery;
+import hmatalonga.greenhub.models.ui.BatteryCard;
+import hmatalonga.greenhub.ui.MainActivity;
+import hmatalonga.greenhub.ui.adapters.BatteryRVAdapter;
+
+import static hmatalonga.greenhub.util.LogUtils.makeLogTag;
 
 /**
  * Home Fragment.
  */
 public class HomeFragment extends Fragment {
 
-    private static TextView sStatusText = null;
-
-    private static String status = "";
-
-    private static GreenHub sApp;
+    private static final String TAG = makeLogTag("HomeFragment");
 
     private Context mContext;
 
-    private BatteryEstimator mEstimator;
+    private MainActivity mActivity;
 
-    // private String mJson;
+    private TextView mBatteryPercentage;
 
-    private ArrayList<DeviceResourceCard> mDeviceResourceCards;
+    private TextView mBatteryCurrentNow;
+
+    private TextView mBatteryCurrentMin;
+
+    private TextView mBatteryCurrentMax;
+
+    private ImageView mPowerDischarging;
+
+    private ImageView mPowerAc;
+
+    private ImageView mPowerUsb;
+
+    private ImageView mPowerWireless;
+
+    private TextView mStatus;
+
+    private ProgressBar mBatteryCircleBar;
 
     private RecyclerView mRecyclerView;
 
-    private TextView mBatteryText;
+    private BatteryRVAdapter mAdapter;
 
-    private ProgressBar mProgressBar;
-
-    private String mValue;
+    private ArrayList<BatteryCard> mBatteryCards;
 
     private Thread mLocalThread;
 
-    private int mCurrentBatteryValue;
+    private Handler mHandler;
+
+    private int mMin;
+
+    private int mMax;
+
+    private String mActivePower;
+
+    public static HomeFragment newInstance() {
+        return new HomeFragment();
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, final ViewGroup container,
                              Bundle savedInstanceState) {
         final View view = inflater.inflate(R.layout.fragment_home, container, false);
 
-        mEstimator = BatteryEstimator.getInstance();
-        mContext = GreenHub.getContext();
+        mContext = view.getContext();
+        mActivity = (MainActivity) getActivity();
+
         mRecyclerView = (RecyclerView) view.findViewById(R.id.rv);
-        assert mRecyclerView != null;
+        mAdapter = null;
 
-        FloatingActionButton fab = (FloatingActionButton) view.findViewById(R.id.fabSendSample);
-        assert fab != null;
-        fab.setOnClickListener(new View.OnClickListener() {
+        LinearLayoutManager layout = new LinearLayoutManager(mContext) {
             @Override
-            public void onClick(View view) {
-                if (sApp != null)
-                    sApp.communicationManager.sendSamples();
+            public boolean canScrollVertically() {
+                return false;
             }
-        });
+        };
 
-        GridLayoutManager layout = new GridLayoutManager(mContext, 1, GridLayoutManager.VERTICAL,
-                false);
         mRecyclerView.setLayoutManager(layout);
         mRecyclerView.setHasFixedSize(true);
 
-        sStatusText = (TextView) view.findViewById(R.id.status);
-        mBatteryText = (TextView) view.findViewById(R.id.batteryCurrentValue);
-        mProgressBar = (ProgressBar) view.findViewById(R.id.batteryProgressbar);
+        mBatteryPercentage = (TextView) view.findViewById(R.id.batteryCurrentValue);
+        mBatteryCircleBar = (ProgressBar) view.findViewById(R.id.batteryProgressbar);
+        mStatus = (TextView) view.findViewById(R.id.status);
 
-        populateView();
+        mBatteryCurrentNow = (TextView) view.findViewById(R.id.batteryCurrentNow);
+        mBatteryCurrentMin = (TextView) view.findViewById(R.id.batteryCurrentMin);
+        mBatteryCurrentMax = (TextView) view.findViewById(R.id.batteryCurrentMax);
+
+        mPowerDischarging = (ImageView) view.findViewById(R.id.imgPowerDischarging);
+        mPowerAc = (ImageView) view.findViewById(R.id.imgPowerAc);
+        mPowerUsb = (ImageView) view.findViewById(R.id.imgPowerUsb);
+        mPowerWireless = (ImageView) view.findViewById(R.id.imgPowerWireless);
+        mActivePower = "";
+
+        mHandler = new Handler();
+        mHandler.postDelayed(runnable, Config.REFRESH_CURRENT_INTERVAL);
 
         return view;
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        EventBus.getDefault().register(this);
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        EventBus.getDefault().unregister(this);
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
-
-        mBatteryText.setText(String.valueOf(mCurrentBatteryValue));
-        mProgressBar.setProgress(mCurrentBatteryValue);
-        sStatusText.setText(status);
+        if (mActivity.getEstimator() != null) {
+            String level = Integer.toString(mActivity.getEstimator().getLevel());
+            mBatteryPercentage.setText(level);
+            mBatteryCircleBar.setProgress(mActivity.getEstimator().getLevel());
+            loadData(mActivity.getEstimator());
+            loadPluggedState("home");
+        }
     }
 
-    /**
-     *
-     * @return
-     */
-    public static GreenHub getApp() {
-        return sApp;
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void updateBatteryLevelUI(BatteryLevelEvent event) {
+        String text = "" + event.level;
+        mBatteryPercentage.setText(text);
+        mBatteryCircleBar.setProgress(event.level);
+
+        // Reload battery cards data from estimator
+        loadData(mActivity.getEstimator());
     }
 
-    /**
-     *
-     * @param app
-     */
-    public static void setApp(GreenHub app) {
-        HomeFragment.sApp = app;
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void updateStatus(StatusEvent event) {
+        mStatus.setText(event.status);
     }
 
-    public static void setStatus(String message) {
-        status = message;
-        if (sStatusText != null)
-            sStatusText.setText(message);
-    }
-
-    /**
-     * Set all values for layout view elements
-     */
-    private void populateView() {
-        mCurrentBatteryValue = (int) mEstimator.currentBatteryLevel();
-        mBatteryText.setText(String.valueOf(mCurrentBatteryValue));
-        mProgressBar.setProgress(mCurrentBatteryValue);
-        sStatusText.setText(status);
-
-        loadData(mContext, mEstimator);
-        setAdapter();
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void updatePowerSource(PowerSourceEvent event) {
+        loadPluggedState(event.status);
     }
 
     /**
      * Creates an array to feed data to the recyclerView
      *
-     * @param context Application context
      * @param estimator Provider of mobile status
      */
-    private void loadData(final Context context, final BatteryEstimator estimator) {
-        // FIXME: Consider another way to load device data...
+    private void loadData(final DataEstimator estimator) {
         mLocalThread = new Thread(new Runnable() {
             public void run() {
-                estimator.getCurrentStatus(context);
-                mDeviceResourceCards = new ArrayList<>();
+                mBatteryCards = new ArrayList<>();
+                String value;
+                int color;
+
                 // Temperature
-                mValue = String.valueOf(estimator.getTemperature() + " ºC");
-                mDeviceResourceCards.add(new DeviceResourceCard("Temperature", mValue));
+                value = String.valueOf(estimator.getTemperature() + " ºC");
+                mBatteryCards.add(
+                        new BatteryCard(R.drawable.ic_thermometer_black_18dp, "Temperature", value)
+                );
+
                 // Voltage
-                mValue = String.valueOf(estimator.getVoltage() + " V");
-                mDeviceResourceCards.add(new DeviceResourceCard("Voltage", mValue));
+                value = String.valueOf(estimator.getVoltage() + " V");
+                mBatteryCards.add(
+                        new BatteryCard(R.drawable.ic_flash_black_18dp, "Voltage", value)
+                );
+
                 // Health
-                mDeviceResourceCards.add(new DeviceResourceCard("Health",
-                        estimator.getHealthStatus()));
-                // Memory
-//                double memUsed = Math.round((Inspector.readMemory(context)[1] / 1024) * 100.0) / 100.0;
-//                mValue = String.valueOf(memUsed) + " MB";
-//                mDeviceResourceCards.add(new DeviceResourceCard(getString(R.string.device_summary_memory_label), mValue));
+                color = estimator.getHealthStatus().equals("Good") ? Color.GREEN : Color.RED;
+                mBatteryCards.add(
+                        new BatteryCard(R.drawable.ic_heart_black_18dp, "Health", estimator.getHealthStatus(), color)
+                );
+
+                // Technology
+                color = estimator.getTechnology().equals("Li-ion") ? Color.GRAY : Color.GREEN;
+                mBatteryCards.add(
+                        new BatteryCard(R.drawable.ic_wrench_black_18dp, "Technology", estimator.getTechnology(), color)
+                );
             }
         });
 
         mLocalThread.start();
+        setAdapter();
     }
 
-    /**
-     *
-     */
     private void setAdapter(){
         try {
             mLocalThread.join();
-            RVAdapter adapter = new RVAdapter(mDeviceResourceCards);
-            mRecyclerView.setAdapter(adapter);
+            if (mAdapter == null) {
+                mAdapter = new BatteryRVAdapter(mBatteryCards);
+                mRecyclerView.setAdapter(mAdapter);
+            } else {
+                mAdapter.swap(mBatteryCards);
+            }
+            mRecyclerView.invalidate();
         }
         catch (InterruptedException e) {
             e.printStackTrace();
         }
     }
+
+    private void loadPluggedState(String status) {
+        mMin = Integer.MAX_VALUE;
+        mMax = Integer.MIN_VALUE;
+        String batteryCharger = "unplugged";
+
+        if (status.equals("home")) {
+            if (mActivity.getEstimator() == null) return;
+
+            switch (mActivity.getEstimator().getPlugged()) {
+                case BatteryManager.BATTERY_PLUGGED_AC:
+                    batteryCharger = "ac";
+                    break;
+                case BatteryManager.BATTERY_PLUGGED_USB:
+                    batteryCharger = "usb";
+                    break;
+            }
+        } else {
+            batteryCharger = status;
+        }
+
+        switch (mActivePower) {
+            case "unplugged":
+                mPowerDischarging.setImageResource(R.drawable.ic_battery_50_grey600_24dp);
+                break;
+            case "ac":
+                mPowerAc.setImageResource(R.drawable.ic_power_plug_grey600_24dp);
+                break;
+            case "usb":
+                mPowerUsb.setImageResource(R.drawable.ic_usb_grey600_24dp);
+                break;
+            case "wireless":
+                mPowerWireless.setImageResource(R.drawable.ic_access_point_grey600_24dp);
+                break;
+        }
+
+        if (batteryCharger.equals("unplugged")) {
+            mPowerDischarging.setImageResource(R.drawable.ic_battery_50_white_24dp);
+        } else if (batteryCharger.equals("ac")) {
+            mPowerAc.setImageResource(R.drawable.ic_power_plug_white_24dp);
+        } else if (batteryCharger.equals("usb")) {
+            mPowerUsb.setImageResource(R.drawable.ic_usb_white_24dp);
+        } else if (batteryCharger.equals("wireless")) {
+            mPowerWireless.setImageResource(R.drawable.ic_access_point_white_24dp);
+        }
+
+        mActivePower = batteryCharger;
+    }
+
+    private Runnable runnable = new Runnable() {
+        @Override
+        public void run() {
+            int now = Battery.getBatteryCurrentNow(mContext);
+            String value;
+
+            if (Math.abs(now) < Math.abs(mMin)) {
+                mMin = now;
+                value = "min: " + mMin + " mA";
+                mBatteryCurrentMin.setText(value);
+            }
+
+            if (Math.abs(now) > Math.abs(mMax)) {
+                mMax = now;
+                value = "max: " + mMax + " mA";
+                mBatteryCurrentMax.setText(value);
+            }
+
+            value = now + " mA";
+            mBatteryCurrentNow.setText(value);
+            mHandler.postDelayed(this, Config.REFRESH_CURRENT_INTERVAL);
+        }
+    };
 }

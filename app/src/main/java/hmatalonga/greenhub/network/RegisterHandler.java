@@ -16,25 +16,21 @@
 
 package hmatalonga.greenhub.network;
 
+import android.content.Context;
 import android.util.Log;
-import android.widget.Toast;
 
-import com.android.volley.DefaultRetryPolicy;
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
-
-import java.util.HashMap;
-import java.util.Map;
+import org.greenrobot.eventbus.EventBus;
 
 import hmatalonga.greenhub.Config;
-import hmatalonga.greenhub.GreenHub;
-import hmatalonga.greenhub.fragments.HomeFragment;
-import hmatalonga.greenhub.managers.sampling.Inspector;
-import hmatalonga.greenhub.models.Device;
+import hmatalonga.greenhub.events.StatusEvent;
+import hmatalonga.greenhub.models.Specifications;
+import hmatalonga.greenhub.models.data.Device;
+import hmatalonga.greenhub.util.SettingsUtils;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.gson.GsonConverterFactory;
 
 /**
  * Registers devices on server for first-run, connects device to server and provides uuid.
@@ -44,108 +40,48 @@ import hmatalonga.greenhub.models.Device;
 public class RegisterHandler {
     private static final String TAG = "RegisterHandler";
 
-    private static RequestQueue sQueue = Volley.newRequestQueue(GreenHub.getContext());
-    private static Map<String, String> sParams = new HashMap<>();
-    
-    private GreenHub sApp = null;
-    private int sTimeout = 5000; // 5s default for socket timeout
+    private GreenHubAPIService mService;
 
-    public RegisterHandler(GreenHub app) {
-        this.sApp = app;
+    public RegisterHandler() {
+        Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl(Config.LOCAL_SERVER_URL)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+        mService = retrofit.create(GreenHubAPIService.class);
     }
 
-    public RegisterHandler(GreenHub app, int timeout) {
-        this.sApp = app;
-        this.sTimeout = timeout;
-    }
+    public Device registerClient(final Context context) {
+        Device device = new Device();
+        device.uuId = Specifications.getAndroidId(context);
+        device.timestamp = System.currentTimeMillis() / 1000.0;
+        device.model = Specifications.getModel();
+        device.manufacturer = Specifications.getManufacturer();
+        device.brand = Specifications.getBrand();
+        device.product = Specifications.getProductName();
+        device.osVersion = Specifications.getOsVersion();
+        device.kernelVersion = Specifications.getKernelVersion();
+        device.serialNumber = Specifications.getBuildSerial();
+        device.isRoot = Specifications.isRooted() ? 1 : 0;
 
-    public Device registerClient() {
-        Device device = new Device(Inspector.getAndroidId(GreenHub.getContext()));
-        device.setTimestamp(System.currentTimeMillis() / 1000.0);
-        device.setModel(Inspector.getModel());
-        device.setManufacturer(Inspector.getManufacturer());
-        device.setBrand(Inspector.getBrand());
-        device.setProduct(Inspector.getProductName());
-        device.setOsVersion(Inspector.getOsVersion());
-        device.setKernelVersion(Inspector.getKernelVersion());
-        device.setSerialNumber(Inspector.getBuildSerial());
-
-        postRegistration(device);
+        postRegistration(context, device);
 
         return device;
     }
 
-    private void postRegistration(final Device device) {
-        String url = sApp.serverURL + "/devices";
-        sParams.clear();
-        sParams.put("uuid", device.getUuId());
-        sParams.put("model", device.getModel());
-        sParams.put("manufacturer", device.getManufacturer());
-        sParams.put("brand", device.getBrand());
-        sParams.put("os", device.getOsVersion());
-        sParams.put("product", device.getProduct());
-        sParams.put("kernel", device.getKernelVersion());
-        sParams.put("serialnum", device.getSerialNumber());
-
-        Log.i(TAG, "Performing request.");
-        
-        // Request a string response from the provided URL.
-        StringRequest stringRequest = new StringRequest(Request.Method.POST, url,
-                new Response.Listener<String>() {
-                    @Override
-                    public void onResponse(String response) {
-                        // FIXME: Better response message handling, work on server-side
-                        response = response.replaceAll("\n", "");
-                        if (!response.equals("Device was registered"))
-                            response = "Device is already registered";
-                        HomeFragment.setStatus(response);
-                    }
-                },
-                new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        error.printStackTrace();
-                        HomeFragment.setStatus("Error on registering!");
-                    }
-        }){
+    private void postRegistration(final Context context, Device device) {
+        Call<Device> call = mService.createDevice(device);
+        call.enqueue(new Callback<Device>() {
             @Override
-            protected Map<String, String> getParams() {
-                return sParams;
+            public void onResponse(Call<Device> call, Response<Device> response) {
+                SettingsUtils.markDeviceAccepted(context, true);
+                EventBus.getDefault().post(new StatusEvent("Device registered successfully"));
             }
-        };
-        // Set Retry Policy for socket timeout
-        stringRequest.setRetryPolicy(new DefaultRetryPolicy(sTimeout,
-                DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT));
-        // Add the request to the RequestQueue.
-        sQueue.add(stringRequest);
-    }
 
-    private void testRegistration() {
-        String url = Config.LOCAL_SERVER_URL + "/devices";
-
-        Log.i(TAG, "Test request!");
-
-        // Request a string response from the provided URL.
-        StringRequest stringRequest = new StringRequest(Request.Method.POST, url,
-                new Response.Listener<String>() {
-                    @Override
-                    public void onResponse(String response) {
-                        Toast.makeText(GreenHub.getContext(), response.replaceAll("\n", ""),
-                                Toast.LENGTH_LONG).show();
-                    }
-                },
-                new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        Toast.makeText(GreenHub.getContext(), "Test failed",
-                                Toast.LENGTH_LONG).show();
-                    }
-                });
-
-        stringRequest.setRetryPolicy(new DefaultRetryPolicy(sTimeout,
-                DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT));
-
-        // Add the request to the RequestQueue.
-        sQueue.add(stringRequest);
+            @Override
+            public void onFailure(Call<Device> call, Throwable t) {
+                SettingsUtils.markDeviceAccepted(context, false);
+                EventBus.getDefault().post(new StatusEvent("Error registering device"));
+            }
+        });
     }
 }
