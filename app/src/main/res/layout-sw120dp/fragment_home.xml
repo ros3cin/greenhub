@@ -7,7 +7,9 @@
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="@dimen/padding_normal">
+        android:paddingBottom="@dimen/padding_normal"
+        android:paddingLeft="@dimen/padding_normal"
+        android:paddingRight="@dimen/padding_normal">
 
         <ProgressBar
             android:id="@+id/batteryProgressbar"
@@ -105,7 +107,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceSmall"
-            android:text="Idle"
+            android:text="@string/status_idle"
             android:id="@+id/status"
             android:layout_alignParentBottom="true"
             android:layout_alignParentLeft="true"
@@ -116,7 +118,7 @@
             android:layout_width="wrap_content"
             android:layout_below="@+id/rv"
             android:layout_centerHorizontal="true"
-            android:layout_marginTop="24dp" />
+            android:layout_marginTop="16dp" />
 
     </RelativeLayout>
 
