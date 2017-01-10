@@ -59,6 +59,9 @@ import android.os.BatteryManager;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
+import com.jaredrummler.android.processes.AndroidProcesses;
+import com.jaredrummler.android.processes.models.AndroidAppProcess;
+
 import org.greenrobot.eventbus.EventBus;
 
 import java.util.ArrayList;
@@ -612,8 +615,8 @@ public final class Inspector {
         long[] idleAndCpu2 = Cpu.readUsagePoint();
 
         // CPU status
-        double uptime = Cpu.getUptime();
-        double sleep = Cpu.getSleepTime();
+        long uptime = Cpu.getUptime();
+        long sleep = Cpu.getSleepTime();
 
         cpuStatus.cpuUsage = Cpu.getUsage(idleAndCpu1, idleAndCpu2);
         cpuStatus.upTime = uptime;
